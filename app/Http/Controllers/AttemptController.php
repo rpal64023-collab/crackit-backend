@@ -28,7 +28,7 @@ class AttemptController extends Controller
         ]);
 
         // Call the FastAPI AI service to evaluate the answer
-        $aiResponse = Http::timeout(15)->post('http://127.0.0.1:8001/ai/evaluate-answer', [
+        $aiResponse = Http::timeout(15)->post('https://crackit-ai-f6tu.onrender.com/ai/evaluate-answer', [
             'question' => $question->content,
             'answer' => $request->answer_text,
         ]);
