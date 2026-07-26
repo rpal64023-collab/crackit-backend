@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\AttemptController;
 use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\TestCaseController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -42,6 +43,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/questions', [QuestionController::class, 'store']);
     Route::put('/questions/{id}', [QuestionController::class, 'update']);
     Route::delete('/questions/{id}', [QuestionController::class, 'destroy']);
+    Route::post('/test-cases', [TestCaseController::class, 'store']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -49,4 +51,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/questions/{id}', [QuestionController::class, 'show']);
     Route::post('/attempts', [AttemptController::class, 'store']);
     Route::get('/attempts', [AttemptController::class, 'index']);
+    Route::get('/questions/{questionId}/test-cases', [TestCaseController::class, 'index']);
 });

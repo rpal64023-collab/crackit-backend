@@ -20,4 +20,9 @@ class Question extends Model
     {
         return $this->hasMany(Attempt::class);
     }
+
+    public function testCases()
+    {
+        return $this->hasMany(TestCase::class);
+    }
 }
