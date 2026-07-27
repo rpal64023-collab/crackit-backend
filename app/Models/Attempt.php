@@ -10,6 +10,8 @@ class Attempt extends Model
         'user_id',
         'question_id',
         'answer_text',
+        'code',
+        'passed',
         'ai_score',
         'ai_feedback',
     ];

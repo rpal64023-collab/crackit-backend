@@ -9,25 +9,36 @@ use Illuminate\Support\Facades\Http;
 
 class AttemptController extends Controller
 {
-    /**
-     * Store a new attempt (student submits an answer).
-     */
     public function store(Request $request)
     {
         $request->validate([
             'question_id' => 'required|exists:questions,id',
-            'answer_text' => 'required|string',
+            'answer_text' => 'required_without:code|nullable|string',
+            'code' => 'required_without:answer_text|nullable|string',
+            'passed' => 'nullable|boolean',
         ]);
 
         $question = Question::findOrFail($request->question_id);
 
+        // DSA / code submission path
+        if ($request->has('code')) {
+            $attempt = Attempt::create([
+                'user_id' => $request->user()->id,
+                'question_id' => $request->question_id,
+                'code' => $request->code,
+                'passed' => $request->boolean('passed'),
+            ]);
+
+            return response()->json($attempt->fresh());
+        }
+
+        // HR / text-answer path (unchanged)
         $attempt = Attempt::create([
             'user_id' => $request->user()->id,
             'question_id' => $request->question_id,
             'answer_text' => $request->answer_text,
         ]);
 
-        // Call the FastAPI AI service to evaluate the answer
         $aiResponse = Http::timeout(15)->post('https://crackit-ai-f6tu.onrender.com/ai/evaluate-answer', [
             'question' => $question->content,
             'answer' => $request->answer_text,
@@ -44,9 +55,6 @@ class AttemptController extends Controller
         return response()->json($attempt->fresh());
     }
 
-    /**
-     * List the logged-in user's own attempts.
-     */
     public function index(Request $request)
     {
         $attempts = Attempt::where('user_id', $request->user()->id)
