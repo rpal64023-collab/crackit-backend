@@ -34,6 +34,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
 // Public: anyone logged in can view questions
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/topics', [QuestionController::class, 'topics']); 
     Route::get('/questions', [QuestionController::class, 'index']);
     Route::get('/questions/{id}', [QuestionController::class, 'show']);
 });

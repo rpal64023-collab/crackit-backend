@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 class QuestionController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * GET /questions?type=dsa&topic=array&difficulty=easy
      */
     public function index(Request $request)
     {
@@ -16,6 +16,10 @@ class QuestionController extends Controller
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
+        }
+
+        if ($request->has('topic')) {
+            $query->where('topic', $request->topic);
         }
 
         if ($request->has('difficulty')) {
@@ -26,7 +30,28 @@ class QuestionController extends Controller
             $query->where('tags', 'like', '%' . $request->tag . '%');
         }
 
-        return response()->json($query->get());
+        return response()->json(
+            $query->select('id', 'title', 'type', 'topic', 'difficulty')->get()
+        );
+    }
+
+    /**
+     * GET /topics?type=dsa
+     * Returns distinct topics for a type, with question counts — used by the Topic select page.
+     */
+    public function topics(Request $request)
+    {
+        $request->validate([
+            'type' => 'required|in:dsa,hr,system_design,core_subject',
+        ]);
+
+        $topics = Question::where('type', $request->type)
+            ->whereNotNull('topic')
+            ->selectRaw('topic, count(*) as count')
+            ->groupBy('topic')
+            ->get();
+
+        return response()->json($topics);
     }
 
     /**
@@ -35,13 +60,15 @@ class QuestionController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'type' => 'required|in:dsa,hr,system_design',
+            'title' => 'nullable|string',
+            'type' => 'required|in:dsa,hr,system_design,core_subject',
+            'topic' => 'nullable|string',
             'difficulty' => 'required|in:easy,medium,hard',
             'tags' => 'nullable|string',
             'content' => 'required|string',
         ]);
 
-        $question = Question::create($request->only(['type', 'difficulty', 'tags', 'content']));
+        $question = Question::create($request->only(['title', 'type', 'topic', 'difficulty', 'tags', 'content']));
 
         return response()->json($question, 201);
     }
@@ -51,7 +78,7 @@ class QuestionController extends Controller
      */
     public function show(string $id)
     {
-        $question = Question::findOrFail($id);
+        $question = Question::with('testCases')->findOrFail($id);
 
         return response()->json($question);
     }
@@ -64,13 +91,15 @@ class QuestionController extends Controller
         $question = Question::findOrFail($id);
 
         $request->validate([
-            'type' => 'sometimes|in:dsa,hr,system_design',
+            'title' => 'sometimes|nullable|string',
+            'type' => 'sometimes|in:dsa,hr,system_design,core_subject',
+            'topic' => 'sometimes|nullable|string',
             'difficulty' => 'sometimes|in:easy,medium,hard',
             'tags' => 'nullable|string',
             'content' => 'sometimes|string',
         ]);
 
-        $question->update($request->only(['type', 'difficulty', 'tags', 'content']));
+        $question->update($request->only(['title', 'type', 'topic', 'difficulty', 'tags', 'content']));
 
         return response()->json($question);
     }
