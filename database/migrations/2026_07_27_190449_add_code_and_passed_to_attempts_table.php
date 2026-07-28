@@ -9,17 +9,27 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('attempts', function (Blueprint $table) {
-            $table->text('answer_text')->nullable()->change();
-            $table->longText('code')->nullable()->after('question_id');
-            $table->boolean('passed')->nullable()->after('code');
+            if (!Schema::hasColumn('attempts', 'code')) {
+                $table->longText('code')->nullable()->after('question_id');
+            }
+            if (!Schema::hasColumn('attempts', 'passed')) {
+                $table->boolean('passed')->nullable()->after('code');
+            }
+            if (Schema::hasColumn('attempts', 'answer_text')) {
+                $table->text('answer_text')->nullable()->change();
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('attempts', function (Blueprint $table) {
-            $table->dropColumn(['code', 'passed']);
-            $table->text('answer_text')->nullable(false)->change();
+            if (Schema::hasColumn('attempts', 'code')) {
+                $table->dropColumn('code');
+            }
+            if (Schema::hasColumn('attempts', 'passed')) {
+                $table->dropColumn('passed');
+            }
         });
     }
 };
