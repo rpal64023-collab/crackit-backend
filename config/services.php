@@ -35,7 +35,7 @@ return [
         ],
     ],
     'groq' => [
-    'key' => env('GROQ_KEY'),
+    'key' => env('GROQ_API_KEY'),
 ],
 
 ];
