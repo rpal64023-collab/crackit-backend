@@ -7,6 +7,7 @@ use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\AttemptController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\TestCaseController;
+use App\Http\Controllers\EvaluationController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -53,4 +54,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attempts', [AttemptController::class, 'store']);
     Route::get('/attempts', [AttemptController::class, 'index']);
     Route::get('/questions/{questionId}/test-cases', [TestCaseController::class, 'index']);
+});
+
+Route::middleware('throttle:code-execution')->group(function () {
+    Route::post('/evaluations', [EvaluationController::class, 'store']);
+    Route::get('/evaluations/{evaluation}', [EvaluationController::class, 'show']);
 });

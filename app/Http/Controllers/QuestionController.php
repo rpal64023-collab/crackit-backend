@@ -30,9 +30,22 @@ class QuestionController extends Controller
             $query->where('tags', 'like', '%' . $request->tag . '%');
         }
 
-        return response()->json(
-            $query->select('id', 'title', 'type', 'topic', 'difficulty')->get()
-        );
+        $questions = $query->select('id', 'title', 'type', 'topic', 'difficulty')->get();
+
+        $userId = $request->user()->id;
+        $solvedIds = \App\Models\Attempt::where('user_id', $userId)
+            ->where(function ($q) {
+                $q->where('passed', true)->orWhereNotNull('answer_text');
+            })
+            ->pluck('question_id')
+            ->unique();
+
+        $questions->transform(function ($q) use ($solvedIds) {
+            $q->solved = $solvedIds->contains($q->id);
+            return $q;
+        });
+
+        return response()->json($questions);
     }
 
     /**
