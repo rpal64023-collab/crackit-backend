@@ -54,6 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attempts', [AttemptController::class, 'store']);
     Route::get('/attempts', [AttemptController::class, 'index']);
     Route::get('/questions/{questionId}/test-cases', [TestCaseController::class, 'index']);
+    Route::get('/questions/{id}/hint', [QuestionController::class, 'hint']);
+    Route::get('/topics', [QuestionController::class, 'topics']);
 });
 
 Route::middleware('throttle:code-execution')->group(function () {

@@ -16,6 +16,11 @@ class Question extends Model
         'difficulty',
         'tags',
         'content',
+        'ai_hint',
+    ];
+
+    protected $casts = [
+        'ai_hint' => 'array',
     ];
 
     public function attempts()

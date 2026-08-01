@@ -49,22 +49,29 @@ class QuestionController extends Controller
     }
 
     /**
-     * GET /topics?type=dsa
-     * Returns distinct topics for a type, with question counts — used by the Topic select page.
+     * GET /topics
+     * Returns question counts grouped by type and topic — used to build
+     * the "All topics / DSA / Core subjects / HR interview" filter row
+     * on the unified Problems page.
      */
-    public function topics(Request $request)
+    public function topics()
     {
-        $request->validate([
-            'type' => 'required|in:dsa,hr,system_design,core_subject',
-        ]);
-
-        $topics = Question::where('type', $request->type)
-            ->whereNotNull('topic')
-            ->selectRaw('topic, count(*) as count')
-            ->groupBy('topic')
+        $counts = Question::selectRaw('type, topic, COUNT(*) as count')
+            ->groupBy('type', 'topic')
             ->get();
 
-        return response()->json($topics);
+        $byType = [];
+        foreach ($counts as $row) {
+            $byType[$row->type]['total'] = ($byType[$row->type]['total'] ?? 0) + $row->count;
+            if ($row->topic) {
+                $byType[$row->type]['topics'][] = [
+                    'topic' => $row->topic,
+                    'count' => $row->count,
+                ];
+            }
+        }
+
+        return response()->json($byType);
     }
 
     /**
@@ -126,5 +133,32 @@ class QuestionController extends Controller
         $question->delete();
 
         return response()->json(['message' => 'Question deleted successfully']);
+    }
+
+    public function hint(string $id)
+    {
+        $question = Question::findOrFail($id);
+
+        if ($question->ai_hint) {
+            return response()->json($question->ai_hint);
+        }
+
+        $aiResponse = \Illuminate\Support\Facades\Http::timeout(60)->post(
+            env('AI_SERVICE_URL', 'https://crackit-ai-f6tu.onrender.com') . '/ai/generate-hint',
+            ['question' => $question->content]
+        );
+
+        if (!$aiResponse->successful()) {
+            return response()->json([
+                'error' => 'Failed to generate hint',
+                'status' => $aiResponse->status(),
+                'body' => $aiResponse->body(),
+            ], 502);
+        }
+
+        $hint = $aiResponse->json();
+        $question->update(['ai_hint' => $hint]);
+
+        return response()->json($hint);
     }
 }

@@ -39,7 +39,7 @@ class AttemptController extends Controller
             'answer_text' => $request->answer_text,
         ]);
 
-        $aiResponse = Http::timeout(15)->post('https://crackit-ai-f6tu.onrender.com/ai/evaluate-answer', [
+      $aiResponse = Http::timeout(60)->post(env('AI_SERVICE_URL', 'https://crackit-ai-f6tu.onrender.com') . '/ai/evaluate-answer', [
             'question' => $question->content,
             'answer' => $request->answer_text,
         ]);
