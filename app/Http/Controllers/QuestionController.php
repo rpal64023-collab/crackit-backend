@@ -161,4 +161,73 @@ class QuestionController extends Controller
 
         return response()->json($hint);
     }
+
+    public function generate(Request $request)
+    {
+        $request->validate([
+            'type' => 'required|in:dsa,hr,system_design,core_subject',
+            'topic' => 'required|string',
+            'difficulty' => 'required|in:easy,medium,hard',
+        ]);
+
+        $aiResponse = \Illuminate\Support\Facades\Http::timeout(90)->post(
+            env('AI_SERVICE_URL', 'https://crackit-ai-f6tu.onrender.com') . '/ai/generate-question',
+            [
+                'type' => $request->type,
+                'topic' => $request->topic,
+                'difficulty' => $request->difficulty,
+            ]
+        );
+
+        if (!$aiResponse->successful()) {
+            return response()->json([
+                'error' => 'Failed to generate question',
+                'status' => $aiResponse->status(),
+                'body' => $aiResponse->body(),
+            ], 502);
+        }
+
+        $data = $aiResponse->json();
+
+        if (isset($data['error'])) {
+            return response()->json($data, 502);
+        }
+
+        $question = Question::create([
+            'title' => $data['title'] ?? null,
+            'type' => $request->type,
+            'topic' => $request->topic,
+            'difficulty' => $request->difficulty,
+            'tags' => $data['tags'] ?? null,
+            'content' => $data['content'] ?? null,
+            'starter_code' => $data['starter_code'] ?? null,
+            'brute_force_solution' => $data['brute_force_solution'] ?? null,
+            'optimal_solution' => $data['optimal_solution'] ?? null,
+            'status' => 'draft',
+        ]);
+
+        foreach ($data['test_cases'] ?? [] as $tc) {
+            $question->testCases()->create([
+                'input' => explode("\n", $tc['stdin']),
+                'expected_output' => $tc['expected_output'],
+                'is_hidden' => false,
+                'label' => $tc['label'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'question' => $question->load('testCases'),
+            'self_validated' => $data['self_validated'] ?? false,
+            'time_complexity' => $data['time_complexity'] ?? null,
+            'space_complexity' => $data['space_complexity'] ?? null,
+        ], 201);
+    }
+
+    public function approve(string $id)
+    {
+        $question = Question::findOrFail($id);
+        $question->update(['status' => 'approved']);
+
+        return response()->json($question);
+    }
 }

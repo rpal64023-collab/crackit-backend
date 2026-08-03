@@ -17,6 +17,11 @@ class Question extends Model
         'tags',
         'content',
         'ai_hint',
+        'starter_code',
+        'brute_force_solution',
+        'optimal_solution',
+        'status',
+        'company',
     ];
 
     protected $casts = [

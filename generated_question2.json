@@ -1,0 +1,61 @@
+﻿{
+    "question":  {
+                     "title":  "Longest Subarray with Limited Difference",
+                     "type":  "dsa",
+                     "topic":  "array",
+                     "difficulty":  "medium",
+                     "tags":  "array,sliding_window,deque",
+                     "content":  "Given an integer array nums and an integer limit, return the size of the longest continuous subarray such that the absolute difference between the maximum and minimum element in that subarray is less than or equal to limit.\n\nIf there is no such subarray, return 0.\n\n**Example 1:**\nInput: nums = [8,2,4,7], limit = 4\nOutput: (could not verify)\nExplanation: The longest subarrays that satisfy the condition are [2,4] and [4,7], each of length 2.\n\n**Example 2:**\nInput: nums = [10,1,2,4,7,2], limit = 5\nOutput: (could not verify)\nExplanation: The longest subarray is [2,4,7,2] with length 4.\n\n**Constraints:**\n- 1 \u003c= nums.length \u003c= 10^5\n- 0 \u003c= nums[i] \u003c= 10^9\n- 0 \u003c= limit \u003c= 10^9",
+                     "starter_code":  "class Solution {\n    public int longestSubarray(int[] nums, int limit) {\n        // TODO: implement\n    }\n}",
+                     "brute_force_solution":  "class Solution {\n    public int longestSubarray(int[] nums, int limit) {\n        int n = nums.length;\n        int best = 0;\n        for (int i = 0; i \u003c n; i++) {\n            int curMax = nums[i];\n            int curMin = nums[i];\n            for (int j = i; j \u003c n; j++) {\n                curMax = Math.max(curMax, nums[j]);\n                curMin = Math.min(curMin, nums[j]);\n                if (curMax - curMin \u003c= limit) {\n                    best = Math.max(best, j - i + 1);\n                } else {\n                    // further extension will only increase the range\n                    break;\n                }\n            }\n        }\n        return best;\n    }\n}",
+                     "optimal_solution":  "import java.util.*;\nclass Solution {\n    public int longestSubarray(int[] nums, int limit) {\n        Deque\u003cInteger\u003e maxDeque = new ArrayDeque\u003c\u003e(); // stores indices, decreasing values\n        Deque\u003cInteger\u003e minDeque = new ArrayDeque\u003c\u003e(); // stores indices, increasing values\n        int left = 0, result = 0;\n        for (int right = 0; right \u003c nums.length; right++) {\n            // maintain maxDeque\n            while (!maxDeque.isEmpty() \u0026\u0026 nums[maxDeque.peekLast()] \u003c nums[right]) {\n                maxDeque.pollLast();\n            }\n            maxDeque.offerLast(right);\n            // maintain minDeque\n            while (!minDeque.isEmpty() \u0026\u0026 nums[minDeque.peekLast()] \u003e nums[right]) {\n                minDeque.pollLast();\n            }\n            minDeque.offerLast(right);\n            // shrink window if condition violated\n            while (nums[maxDeque.peekFirst()] - nums[minDeque.peekFirst()] \u003e limit) {\n                if (maxDeque.peekFirst() == left) maxDeque.pollFirst();\n                if (minDeque.peekFirst() == left) minDeque.pollFirst();\n                left++;\n            }\n            result = Math.max(result, right - left + 1);\n        }\n        return result;\n    }\n}",
+                     "status":  "draft",
+                     "updated_at":  "2026-08-01T15:45:26.000000Z",
+                     "created_at":  "2026-08-01T15:45:26.000000Z",
+                     "id":  4,
+                     "test_cases":  [
+                                        {
+                                            "id":  8,
+                                            "question_id":  4,
+                                            "input":  [
+                                                          "8",
+                                                          "1 5 6 7 8 10 6 5",
+                                                          "3"
+                                                      ],
+                                            "expected_output":  "",
+                                            "is_hidden":  false,
+                                            "created_at":  "2026-08-01T15:45:26.000000Z",
+                                            "updated_at":  "2026-08-01T15:45:26.000000Z"
+                                        },
+                                        {
+                                            "id":  9,
+                                            "question_id":  4,
+                                            "input":  [
+                                                          "1",
+                                                          "42",
+                                                          "0"
+                                                      ],
+                                            "expected_output":  "",
+                                            "is_hidden":  false,
+                                            "created_at":  "2026-08-01T15:45:26.000000Z",
+                                            "updated_at":  "2026-08-01T15:45:26.000000Z"
+                                        },
+                                        {
+                                            "id":  10,
+                                            "question_id":  4,
+                                            "input":  [
+                                                          "10",
+                                                          "3 3 3 3 3 3 3 3 3 3",
+                                                          "0"
+                                                      ],
+                                            "expected_output":  "",
+                                            "is_hidden":  false,
+                                            "created_at":  "2026-08-01T15:45:26.000000Z",
+                                            "updated_at":  "2026-08-01T15:45:26.000000Z"
+                                        }
+                                    ]
+                 },
+    "self_validated":  false,
+    "time_complexity":  "O(n)",
+    "space_complexity":  "O(n)"
+}

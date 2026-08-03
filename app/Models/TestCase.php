@@ -11,6 +11,7 @@ class TestCase extends Model
         'input',
         'expected_output',
         'is_hidden',
+        'label',
     ];
 
     protected $casts = [
