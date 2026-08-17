@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/topics', [QuestionController::class, 'topics']);
     Route::get('/questions', [QuestionController::class, 'index']);
     Route::get('/questions/{id}', [QuestionController::class, 'show']);
+    Route::get('/practice/recommended', [QuestionController::class, 'recommended']);
 });
 
 // Admin only: create, update, delete questions

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Question;
 use Illuminate\Http\Request;
+use App\Models\Attempt;
 
 class QuestionController extends Controller
 {
@@ -230,4 +231,118 @@ class QuestionController extends Controller
 
         return response()->json($question);
     }
+
+    /**
+ * GET /practice/recommended?type=dsa
+ * Recommends the next question using a rule-based adaptive system:
+ * - Prioritizes topics the user is weakest in (or has never tried)
+ * - Adjusts difficulty up/down based on the user's last 3 attempts in that type
+ * - Skips questions already solved
+ */
+public function recommended(Request $request)
+{
+    $request->validate([
+        'type' => 'required|in:dsa,hr,system_design,core_subject',
+    ]);
+
+    $userId = $request->user()->id;
+    $type = $request->type;
+
+    // 1. Get all approved questions of this type, grouped by topic
+    $questionsByTopic = Question::where('type', $type)
+        ->where(function ($q) {
+            $q->whereNull('status')->orWhere('status', 'approved');
+        })
+        ->get()
+        ->groupBy('topic');
+
+    if ($questionsByTopic->isEmpty()) {
+        return response()->json(['error' => 'No questions available for this type yet.'], 404);
+    }
+
+    // 2. Compute per-topic accuracy from the user's attempts in this type
+    $attempts = Attempt::where('user_id', $userId)
+        ->whereHas('question', fn($q) => $q->where('type', $type))
+        ->with('question')
+        ->get();
+
+    $topicStats = [];
+    foreach ($questionsByTopic as $topic => $questions) {
+        $topicAttempts = $attempts->filter(fn($a) => $a->question->topic === $topic);
+        $solvedIds = $topicAttempts
+            ->filter(fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60))
+            ->pluck('question_id')
+            ->unique();
+
+        $accuracy = $topicAttempts->count() > 0
+            ? ($solvedIds->count() / $topicAttempts->unique('question_id')->count()) * 100
+            : null; // null = never attempted, treated as highest priority
+
+        $topicStats[$topic] = [
+            'accuracy' => $accuracy,
+            'attempt_count' => $topicAttempts->count(),
+            'solved_ids' => $solvedIds,
+        ];
+    }
+
+    // 3. Pick the weakest topic: never-attempted topics first, then lowest accuracy
+    $weakestTopic = collect($topicStats)
+        ->sortBy(fn($stats) => $stats['accuracy'] ?? -1) // null (never tried) sorts first
+        ->keys()
+        ->first();
+
+    // 4. Decide difficulty based on the user's last 3 attempts in this topic
+    $recentInTopic = $attempts
+        ->filter(fn($a) => $a->question->topic === $weakestTopic)
+        ->sortByDesc('created_at')
+        ->take(3);
+
+    $recentPassed = $recentInTopic->filter(
+        fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60)
+    )->count();
+
+    $difficultyOrder = ['easy', 'medium', 'hard'];
+    if ($recentInTopic->isEmpty()) {
+        $targetDifficulty = 'easy';
+    } elseif ($recentPassed >= 2) {
+        // doing well — bump difficulty
+        $lastDifficulty = $recentInTopic->first()->question->difficulty;
+        $idx = array_search($lastDifficulty, $difficultyOrder);
+        $targetDifficulty = $difficultyOrder[min($idx + 1, 2)];
+    } elseif ($recentPassed === 0) {
+        // struggling — drop difficulty
+        $lastDifficulty = $recentInTopic->first()->question->difficulty;
+        $idx = array_search($lastDifficulty, $difficultyOrder);
+        $targetDifficulty = $difficultyOrder[max($idx - 1, 0)];
+    } else {
+        $targetDifficulty = $recentInTopic->first()->question->difficulty;
+    }
+
+    // 5. Find an unsolved question in that topic + difficulty (fallback: any difficulty in that topic)
+    $solvedIds = $topicStats[$weakestTopic]['solved_ids'];
+
+    $candidate = $questionsByTopic[$weakestTopic]
+        ->where('difficulty', $targetDifficulty)
+        ->whereNotIn('id', $solvedIds)
+        ->first();
+
+    if (!$candidate) {
+        $candidate = $questionsByTopic[$weakestTopic]
+            ->whereNotIn('id', $solvedIds)
+            ->first();
+    }
+
+    if (!$candidate) {
+        return response()->json(['error' => 'You have solved everything available in your weakest topic — great job!'], 404);
+    }
+
+    return response()->json([
+        'question_id' => $candidate->id,
+        'topic' => $weakestTopic,
+        'difficulty' => $candidate->difficulty,
+        'reason' => $topicStats[$weakestTopic]['accuracy'] === null
+            ? "You haven't tried \"$weakestTopic\" yet"
+            : "Your accuracy in \"$weakestTopic\" is " . round($topicStats[$weakestTopic]['accuracy']) . "%",
+    ]);
+}
 }
