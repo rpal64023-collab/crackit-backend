@@ -9,11 +9,21 @@ use App\Models\Attempt;
 class QuestionController extends Controller
 {
     /**
-     * GET /questions?type=dsa&topic=array&difficulty=easy
+     * GET /questions?type=dsa&topic=array&difficulty=easy&status=all
+     * By default only returns approved questions (so AI-generated drafts
+     * never leak to students). Pass status=all (admin panel) to see everything,
+     * or status=draft to see only drafts.
      */
     public function index(Request $request)
     {
         $query = Question::query();
+
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        } elseif (!$request->has('status')) {
+            $query->where('status', 'approved');
+        }
+        // status=all -> no status filter applied, returns everything
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
@@ -31,7 +41,7 @@ class QuestionController extends Controller
             $query->where('tags', 'like', '%' . $request->tag . '%');
         }
 
-        $questions = $query->select('id', 'title', 'type', 'topic', 'difficulty')->get();
+        $questions = $query->select('id', 'title', 'type', 'topic', 'difficulty', 'status')->get();
 
         $userId = $request->user()->id;
         $solvedIds = \App\Models\Attempt::where('user_id', $userId)
@@ -51,13 +61,14 @@ class QuestionController extends Controller
 
     /**
      * GET /topics
-     * Returns question counts grouped by type and topic — used to build
-     * the "All topics / DSA / Core subjects / HR interview" filter row
-     * on the unified Problems page.
+     * Returns question counts grouped by type and topic (approved only) —
+     * used to build the "All topics / DSA / Core subjects / HR interview"
+     * filter row on the unified Problems page.
      */
     public function topics()
     {
-        $counts = Question::selectRaw('type, topic, COUNT(*) as count')
+        $counts = Question::where('status', 'approved')
+            ->selectRaw('type, topic, COUNT(*) as count')
             ->groupBy('type', 'topic')
             ->get();
 
@@ -89,7 +100,10 @@ class QuestionController extends Controller
             'content' => 'required|string',
         ]);
 
-        $question = Question::create($request->only(['title', 'type', 'topic', 'difficulty', 'tags', 'content']));
+        $question = Question::create([
+            ...$request->only(['title', 'type', 'topic', 'difficulty', 'tags', 'content']),
+            'status' => 'approved', // manually created questions are approved immediately
+        ]);
 
         return response()->json($question, 201);
     }
@@ -233,116 +247,116 @@ class QuestionController extends Controller
     }
 
     /**
- * GET /practice/recommended?type=dsa
- * Recommends the next question using a rule-based adaptive system:
- * - Prioritizes topics the user is weakest in (or has never tried)
- * - Adjusts difficulty up/down based on the user's last 3 attempts in that type
- * - Skips questions already solved
- */
-public function recommended(Request $request)
-{
-    $request->validate([
-        'type' => 'required|in:dsa,hr,system_design,core_subject',
-    ]);
+     * GET /practice/recommended?type=dsa
+     * Recommends the next question using a rule-based adaptive system:
+     * - Prioritizes topics the user is weakest in (or has never tried)
+     * - Adjusts difficulty up/down based on the user's last 3 attempts in that type
+     * - Skips questions already solved
+     */
+    public function recommended(Request $request)
+    {
+        $request->validate([
+            'type' => 'required|in:dsa,hr,system_design,core_subject',
+        ]);
 
-    $userId = $request->user()->id;
-    $type = $request->type;
+        $userId = $request->user()->id;
+        $type = $request->type;
 
-    // 1. Get all approved questions of this type, grouped by topic
-    $questionsByTopic = Question::where('type', $type)
-        ->where(function ($q) {
-            $q->whereNull('status')->orWhere('status', 'approved');
-        })
-        ->get()
-        ->groupBy('topic');
+        // 1. Get all approved questions of this type, grouped by topic
+        $questionsByTopic = Question::where('type', $type)
+            ->where(function ($q) {
+                $q->whereNull('status')->orWhere('status', 'approved');
+            })
+            ->get()
+            ->groupBy('topic');
 
-    if ($questionsByTopic->isEmpty()) {
-        return response()->json(['error' => 'No questions available for this type yet.'], 404);
-    }
+        if ($questionsByTopic->isEmpty()) {
+            return response()->json(['error' => 'No questions available for this type yet.'], 404);
+        }
 
-    // 2. Compute per-topic accuracy from the user's attempts in this type
-    $attempts = Attempt::where('user_id', $userId)
-        ->whereHas('question', fn($q) => $q->where('type', $type))
-        ->with('question')
-        ->get();
+        // 2. Compute per-topic accuracy from the user's attempts in this type
+        $attempts = Attempt::where('user_id', $userId)
+            ->whereHas('question', fn($q) => $q->where('type', $type))
+            ->with('question')
+            ->get();
 
-    $topicStats = [];
-    foreach ($questionsByTopic as $topic => $questions) {
-        $topicAttempts = $attempts->filter(fn($a) => $a->question->topic === $topic);
-        $solvedIds = $topicAttempts
-            ->filter(fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60))
-            ->pluck('question_id')
-            ->unique();
+        $topicStats = [];
+        foreach ($questionsByTopic as $topic => $questions) {
+            $topicAttempts = $attempts->filter(fn($a) => $a->question->topic === $topic);
+            $solvedIds = $topicAttempts
+                ->filter(fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60))
+                ->pluck('question_id')
+                ->unique();
 
-        $accuracy = $topicAttempts->count() > 0
-            ? ($solvedIds->count() / $topicAttempts->unique('question_id')->count()) * 100
-            : null; // null = never attempted, treated as highest priority
+            $accuracy = $topicAttempts->count() > 0
+                ? ($solvedIds->count() / $topicAttempts->unique('question_id')->count()) * 100
+                : null; // null = never attempted, treated as highest priority
 
-        $topicStats[$topic] = [
-            'accuracy' => $accuracy,
-            'attempt_count' => $topicAttempts->count(),
-            'solved_ids' => $solvedIds,
-        ];
-    }
+            $topicStats[$topic] = [
+                'accuracy' => $accuracy,
+                'attempt_count' => $topicAttempts->count(),
+                'solved_ids' => $solvedIds,
+            ];
+        }
 
-    // 3. Pick the weakest topic: never-attempted topics first, then lowest accuracy
-    $weakestTopic = collect($topicStats)
-        ->sortBy(fn($stats) => $stats['accuracy'] ?? -1) // null (never tried) sorts first
-        ->keys()
-        ->first();
+        // 3. Pick the weakest topic: never-attempted topics first, then lowest accuracy
+        $weakestTopic = collect($topicStats)
+            ->sortBy(fn($stats) => $stats['accuracy'] ?? -1) // null (never tried) sorts first
+            ->keys()
+            ->first();
 
-    // 4. Decide difficulty based on the user's last 3 attempts in this topic
-    $recentInTopic = $attempts
-        ->filter(fn($a) => $a->question->topic === $weakestTopic)
-        ->sortByDesc('created_at')
-        ->take(3);
+        // 4. Decide difficulty based on the user's last 3 attempts in this topic
+        $recentInTopic = $attempts
+            ->filter(fn($a) => $a->question->topic === $weakestTopic)
+            ->sortByDesc('created_at')
+            ->take(3);
 
-    $recentPassed = $recentInTopic->filter(
-        fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60)
-    )->count();
+        $recentPassed = $recentInTopic->filter(
+            fn($a) => $a->passed === true || ($a->ai_score !== null && $a->ai_score >= 60)
+        )->count();
 
-    $difficultyOrder = ['easy', 'medium', 'hard'];
-    if ($recentInTopic->isEmpty()) {
-        $targetDifficulty = 'easy';
-    } elseif ($recentPassed >= 2) {
-        // doing well — bump difficulty
-        $lastDifficulty = $recentInTopic->first()->question->difficulty;
-        $idx = array_search($lastDifficulty, $difficultyOrder);
-        $targetDifficulty = $difficultyOrder[min($idx + 1, 2)];
-    } elseif ($recentPassed === 0) {
-        // struggling — drop difficulty
-        $lastDifficulty = $recentInTopic->first()->question->difficulty;
-        $idx = array_search($lastDifficulty, $difficultyOrder);
-        $targetDifficulty = $difficultyOrder[max($idx - 1, 0)];
-    } else {
-        $targetDifficulty = $recentInTopic->first()->question->difficulty;
-    }
+        $difficultyOrder = ['easy', 'medium', 'hard'];
+        if ($recentInTopic->isEmpty()) {
+            $targetDifficulty = 'easy';
+        } elseif ($recentPassed >= 2) {
+            // doing well — bump difficulty
+            $lastDifficulty = $recentInTopic->first()->question->difficulty;
+            $idx = array_search($lastDifficulty, $difficultyOrder);
+            $targetDifficulty = $difficultyOrder[min($idx + 1, 2)];
+        } elseif ($recentPassed === 0) {
+            // struggling — drop difficulty
+            $lastDifficulty = $recentInTopic->first()->question->difficulty;
+            $idx = array_search($lastDifficulty, $difficultyOrder);
+            $targetDifficulty = $difficultyOrder[max($idx - 1, 0)];
+        } else {
+            $targetDifficulty = $recentInTopic->first()->question->difficulty;
+        }
 
-    // 5. Find an unsolved question in that topic + difficulty (fallback: any difficulty in that topic)
-    $solvedIds = $topicStats[$weakestTopic]['solved_ids'];
+        // 5. Find an unsolved question in that topic + difficulty (fallback: any difficulty in that topic)
+        $solvedIds = $topicStats[$weakestTopic]['solved_ids'];
 
-    $candidate = $questionsByTopic[$weakestTopic]
-        ->where('difficulty', $targetDifficulty)
-        ->whereNotIn('id', $solvedIds)
-        ->first();
-
-    if (!$candidate) {
         $candidate = $questionsByTopic[$weakestTopic]
+            ->where('difficulty', $targetDifficulty)
             ->whereNotIn('id', $solvedIds)
             ->first();
-    }
 
-    if (!$candidate) {
-        return response()->json(['error' => 'You have solved everything available in your weakest topic — great job!'], 404);
-    }
+        if (!$candidate) {
+            $candidate = $questionsByTopic[$weakestTopic]
+                ->whereNotIn('id', $solvedIds)
+                ->first();
+        }
 
-    return response()->json([
-        'question_id' => $candidate->id,
-        'topic' => $weakestTopic,
-        'difficulty' => $candidate->difficulty,
-        'reason' => $topicStats[$weakestTopic]['accuracy'] === null
-            ? "You haven't tried \"$weakestTopic\" yet"
-            : "Your accuracy in \"$weakestTopic\" is " . round($topicStats[$weakestTopic]['accuracy']) . "%",
-    ]);
-}
+        if (!$candidate) {
+            return response()->json(['error' => 'You have solved everything available in your weakest topic — great job!'], 404);
+        }
+
+        return response()->json([
+            'question_id' => $candidate->id,
+            'topic' => $weakestTopic,
+            'difficulty' => $candidate->difficulty,
+            'reason' => $topicStats[$weakestTopic]['accuracy'] === null
+                ? "You haven't tried \"$weakestTopic\" yet"
+                : "Your accuracy in \"$weakestTopic\" is " . round($topicStats[$weakestTopic]['accuracy']) . "%",
+        ]);
+    }
 }
