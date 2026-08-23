@@ -49,6 +49,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/test-cases', [TestCaseController::class, 'store']);
     Route::post('/admin/generate-question', [QuestionController::class, 'generate']);
     Route::post('/admin/questions/{id}/approve', [QuestionController::class, 'approve']);
+    Route::put('/test-cases/{id}', [TestCaseController::class, 'update']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {

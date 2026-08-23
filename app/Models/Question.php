@@ -20,12 +20,17 @@ class Question extends Model
         'starter_code',
         'brute_force_solution',
         'optimal_solution',
+        'test_harness',
         'status',
         'company',
     ];
 
     protected $casts = [
         'ai_hint' => 'array',
+        'starter_code' => 'array',
+        'brute_force_solution' => 'array',
+        'optimal_solution' => 'array',
+        'test_harness' => 'array',
     ];
 
     public function attempts()

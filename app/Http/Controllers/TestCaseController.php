@@ -27,4 +27,18 @@ class TestCaseController extends Controller
 
         return response()->json($testCases);
     }
+    public function update(Request $request, $id)
+    {
+        $testCase = TestCase::findOrFail($id);
+
+        $request->validate([
+            'input' => 'sometimes|required|array',
+            'expected_output' => 'sometimes|required|string',
+            'is_hidden' => 'sometimes|boolean',
+            'label' => 'sometimes|nullable|string',
+        ]);
+        $testCase->update($request->only(['input', 'expected_output', 'is_hidden', 'label']));
+
+        return response()->json($testCase);
+    }
 }

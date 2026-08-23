@@ -111,9 +111,13 @@ class QuestionController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(string $id, Request $request)
     {
         $question = Question::with('testCases')->findOrFail($id);
+
+        if ($question->status !== 'approved' && $request->user()->role !== 'admin') {
+            abort(404, 'Question not found.');
+        }
 
         return response()->json($question);
     }
