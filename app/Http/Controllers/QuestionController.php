@@ -189,7 +189,7 @@ class QuestionController extends Controller
             'difficulty' => 'required|in:easy,medium,hard',
         ]);
 
-        $aiResponse = \Illuminate\Support\Facades\Http::timeout(90)->post(
+        $aiResponse = \Illuminate\Support\Facades\Http::timeout(150)->post(
             env('AI_SERVICE_URL', 'https://crackit-ai-f6tu.onrender.com') . '/ai/generate-question',
             [
                 'type' => $request->type,
@@ -219,13 +219,17 @@ class QuestionController extends Controller
             'difficulty' => $request->difficulty,
             'tags' => $data['tags'] ?? null,
             'content' => $data['content'] ?? null,
-            'starter_code' => $data['starter_code'] ?? null,
-            'brute_force_solution' => $data['brute_force_solution'] ?? null,
-            'optimal_solution' => $data['optimal_solution'] ?? null,
+            'starter_code' => $data['starter_code'] ?? null,           // {java:..., cpp:..., c:..., python:...}
+            'brute_force_solution' => $data['brute_force_solution'] ?? null, // Java only, internal
+            'optimal_solution' => $data['optimal_solution'] ?? null,   // {java:..., cpp:..., c:..., python:...}
+            'test_harness' => $data['test_harness'] ?? null,           // {java:..., cpp:..., c:..., python:...}
             'status' => 'draft',
         ]);
 
         foreach ($data['test_cases'] ?? [] as $tc) {
+            if (empty($tc['expected_output'])) {
+                continue;
+            }
             $question->testCases()->create([
                 'input' => explode("\n", $tc['stdin']),
                 'expected_output' => $tc['expected_output'],
@@ -237,8 +241,13 @@ class QuestionController extends Controller
         return response()->json([
             'question' => $question->load('testCases'),
             'self_validated' => $data['self_validated'] ?? false,
+            'available_languages' => $data['available_languages'] ?? ['java'],
             'time_complexity' => $data['time_complexity'] ?? null,
             'space_complexity' => $data['space_complexity'] ?? null,
+            // was missing — this is the ONLY way to see exactly why cpp/c/python
+            // got excluded (translate-stage parse error vs validate-stage output
+            // mismatch, which attempt, and the exact stdin/expected/got).
+            'translation_debug' => $data['translation_debug'] ?? [],
         ], 201);
     }
 
